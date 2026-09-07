@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SCOTT / TIGER &mdash; Employee Manager</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="prompt">SQL&gt;</span>
+      <h1>SCOTT&nbsp;/&nbsp;TIGER</h1>
+      <span class="sub">EMP &amp; DEPT &middot; 3-Tier CRUD &middot; ASP.NET Core + SQL Server</span>
+    </div>
+    <button id="btnNew" class="btn btn-primary">+ New Employee</button>
+  </header>
+
+  <main>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Employees</h2>
+        <span id="rowCount" class="pill">0 rows</span>
+      </div>
+      <div class="table-wrap">
+        <table id="empTable">
+          <thead>
+            <tr>
+              <th>EMPNO</th><th>ENAME</th><th>JOB</th><th>MGR</th>
+              <th>HIREDATE</th><th class="num">SAL</th><th class="num">COMM</th>
+              <th>DEPT</th><th class="actions">&nbsp;</th>
+            </tr>
+          </thead>
+          <tbody id="empBody"><!-- rows injected here --></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Add / Edit modal -->
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="modalTitle">New Employee</h3>
+        <button id="btnClose" class="icon-btn" aria-label="Close">&times;</button>
+      </div>
+      <div class="form-grid">
+        <label>EMPNO
+          <input id="fEmpNo" type="number" />
+        </label>
+        <label>ENAME
+          <input id="fEName" type="text" maxlength="10" />
+        </label>
+        <label>JOB
+          <input id="fJob" type="text" maxlength="9" list="jobs" />
+          <datalist id="jobs">
+            <option>CLERK</option><option>SALESMAN</option><option>MANAGER</option>
+            <option>ANALYST</option><option>PRESIDENT</option>
+          </datalist>
+        </label>
+        <label>MGR
+          <input id="fMgr" type="number" />
+        </label>
+        <label>HIREDATE
+          <input id="fHireDate" type="date" />
+        </label>
+        <label>SAL
+          <input id="fSal" type="number" step="0.01" />
+        </label>
+        <label>COMM
+          <input id="fComm" type="number" step="0.01" />
+        </label>
+        <label>DEPTNO
+          <select id="fDeptNo"></select>
+        </label>
+      </div>
+      <div id="formError" class="form-error hidden"></div>
+      <div class="modal-foot">
+        <button id="btnCancel" class="btn">Cancel</button>
+        <button id="btnSave" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span>Restored from Oracle 9i, circa the good olden days.</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
