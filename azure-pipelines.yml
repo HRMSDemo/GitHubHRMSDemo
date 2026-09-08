@@ -1,17 +1,25 @@
-# ASP.NET Core
-# Build and test ASP.NET Core projects targeting .NET Core.
-# Add steps that run tests, create a NuGet package, deploy, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/languages/dotnet-core
-
+# ASP.NET Core - build, publish, and expose the output as an artifact
 trigger:
 - main
 
 pool:
-  vmImage: windows-latest
+  name: Default          # your self-hosted agent (devhrms), not hosted
 
 variables:
   buildConfiguration: 'Release'
 
 steps:
-- script: dotnet build --configuration $(buildConfiguration)
+- script: dotnet restore
+  displayName: 'dotnet restore'
+
+- script: dotnet build --configuration $(buildConfiguration) --no-restore
   displayName: 'dotnet build $(buildConfiguration)'
+
+- script: dotnet publish --configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory)/app
+  displayName: 'dotnet publish'
+
+- task: PublishBuildArtifacts@1
+  displayName: 'Publish artifact'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)/app'
+    ArtifactName: 'hrms'
