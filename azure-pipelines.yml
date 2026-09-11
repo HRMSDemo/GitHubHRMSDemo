@@ -1,25 +1,77 @@
-# ASP.NET Core - build, publish, and expose the output as an artifact
+# HRMS multi-stage: commit->Dev, TEST_ tag->Test, PROD_ tag->Prod (manual approval)
 trigger:
-- main
+  branches:
+    include:
+      - main
+  tags:
+    include:
+      - TEST_*
+      - PROD_*
 
 pool:
-  name: Default          # your self-hosted agent (devhrms), not hosted
+  name: Default
 
 variables:
   buildConfiguration: 'Release'
 
-steps:
-- script: dotnet restore
-  displayName: 'dotnet restore'
+stages:
+- stage: Dev
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+  jobs:
+  - job: BuildDeployDev
+    steps:
+    - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
+      displayName: 'Build + publish'
+    - task: PowerShell@2
+      displayName: 'Deploy to Dev'
+      inputs:
+        targetType: inline
+        script: |
+          Import-Module WebAdministration
+          Stop-WebAppPool -Name "devhrms"; Start-Sleep 3
+          robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\devhrms" /MIR /XF appsettings.json /R:2 /W:2
+          if ($LASTEXITCODE -ge 8) { exit 1 }
+          Start-WebAppPool -Name "devhrms"
+          exit 0
 
-- script: dotnet build --configuration $(buildConfiguration) --no-restore
-  displayName: 'dotnet build $(buildConfiguration)'
+- stage: Test
+  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST_')
+  jobs:
+  - job: BuildDeployTest
+    steps:
+    - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
+      displayName: 'Build + publish'
+    - task: PowerShell@2
+      displayName: 'Deploy to Test'
+      inputs:
+        targetType: inline
+        script: |
+          Import-Module WebAdministration
+          Stop-WebAppPool -Name "testhrms"; Start-Sleep 3
+          robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\testhrms" /MIR /XF appsettings.json /R:2 /W:2
+          if ($LASTEXITCODE -ge 8) { exit 1 }
+          Start-WebAppPool -Name "testhrms"
+          exit 0
 
-- script: dotnet publish --configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory)/app
-  displayName: 'dotnet publish'
-
-- task: PublishBuildArtifacts@1
-  displayName: 'Publish artifact'
-  inputs:
-    PathtoPublish: '$(Build.ArtifactStagingDirectory)/app'
-    ArtifactName: 'hrms'
+- stage: Prod
+  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD_')
+  jobs:
+  - deployment: DeployProd
+    environment: Prod
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
+            displayName: 'Build + publish'
+          - task: PowerShell@2
+            displayName: 'Deploy to Prod'
+            inputs:
+              targetType: inline
+              script: |
+                Import-Module WebAdministration
+                Stop-WebAppPool -Name "prodhrms"; Start-Sleep 3
+                robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\prodhrms" /MIR /XF appsettings.json /R:2 /W:2
+                if ($LASTEXITCODE -ge 8) { exit 1 }
+                Start-WebAppPool -Name "prodhrms"
+                exit 0
