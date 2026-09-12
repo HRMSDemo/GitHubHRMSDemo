@@ -2,6 +2,7 @@
 trigger:
   branches:
     include:
+      - dev
       - main
   tags:
     include:
@@ -16,7 +17,7 @@ variables:
 
 stages:
 - stage: Dev
-  condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/dev')
   jobs:
   - job: BuildDeployDev
     steps:
