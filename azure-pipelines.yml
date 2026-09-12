@@ -42,6 +42,18 @@ stages:
     - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
       displayName: 'Build + publish'
     - task: PowerShell@2
+      displayName: 'Trivy security scan'
+      inputs:
+        targetType: inline
+        script: |
+          C:\tools\trivy\trivy.exe fs --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 --no-progress $(Build.SourcesDirectory)
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "##[error]Trivy found HIGH/CRITICAL issues - blocking Test deploy"
+            exit 1
+          }
+          Write-Host "Trivy scan passed"
+          exit 0
+    - task: PowerShell@2
       displayName: 'Deploy to Test'
       inputs:
         targetType: inline
