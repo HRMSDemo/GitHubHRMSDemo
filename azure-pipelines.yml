@@ -1,12 +1,12 @@
-# HRMS multi-stage: commit->Dev, TEST_ tag->Test, PROD_ tag->Prod (manual approval)
+# HRMS multi-stage: commit->Dev, TEST- tag->Test, PROD- tag->Prod (manual approval)
 trigger:
   branches:
     include:
       - main
   tags:
     include:
-      - TEST_*
-      - PROD_*
+      - TEST-*
+      - PROD-*
 
 pool:
   name: Default
