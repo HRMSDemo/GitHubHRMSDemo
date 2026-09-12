@@ -35,7 +35,7 @@ stages:
           exit 0
 
 - stage: Test
-  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST_')
+  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST-')
   jobs:
   - job: BuildDeployTest
     steps:
@@ -54,7 +54,7 @@ stages:
           exit 0
 
 - stage: Prod
-  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD_')
+  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD-')
   jobs:
   - deployment: DeployProd
     environment: Prod
