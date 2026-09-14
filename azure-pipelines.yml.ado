@@ -1,3 +1,4 @@
+# HRMS multi-stage: commit->Dev, TEST- tag->Test, PROD- tag->Prod (manual approval)
 trigger:
   branches:
     include:
@@ -23,15 +24,15 @@ stages:
     - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
       displayName: 'Build + publish'
     - task: PowerShell@2
-      displayName: 'Deploy to GH Dev'
+      displayName: 'Deploy to Dev'
       inputs:
         targetType: inline
         script: |
           Import-Module WebAdministration
-          Stop-WebAppPool githubdevhrms; Start-Sleep 3
-          robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\githubdevhrms" /MIR /XF appsettings.json /R:2 /W:2
+          Stop-WebAppPool -Name "devhrms"; Start-Sleep 3
+          robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\devhrms" /MIR /XF appsettings.json /R:2 /W:2
           if ($LASTEXITCODE -ge 8) { exit 1 }
-          Start-WebAppPool githubdevhrms
+          Start-WebAppPool -Name "devhrms"
           exit 0
 
 - stage: Test
@@ -42,15 +43,27 @@ stages:
     - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
       displayName: 'Build + publish'
     - task: PowerShell@2
-      displayName: 'Deploy to GH Test'
+      displayName: 'Trivy security scan'
+      inputs:
+        targetType: inline
+        script: |
+          C:\tools\trivy\trivy.exe fs --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 --no-progress $(Build.SourcesDirectory)
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "##[error]Trivy found HIGH/CRITICAL issues - blocking Test deploy"
+            exit 1
+          }
+          Write-Host "Trivy scan passed"
+          exit 0
+    - task: PowerShell@2
+      displayName: 'Deploy to Test'
       inputs:
         targetType: inline
         script: |
           Import-Module WebAdministration
-          Stop-WebAppPool githubtesthrms; Start-Sleep 3
-          robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\githubtesthrms" /MIR /XF appsettings.json /R:2 /W:2
+          Stop-WebAppPool -Name "testhrms"; Start-Sleep 3
+          robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\testhrms" /MIR /XF appsettings.json /R:2 /W:2
           if ($LASTEXITCODE -ge 8) { exit 1 }
-          Start-WebAppPool githubtesthrms
+          Start-WebAppPool -Name "testhrms"
           exit 0
 
 - stage: Prod
@@ -65,13 +78,13 @@ stages:
           - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
             displayName: 'Build + publish'
           - task: PowerShell@2
-            displayName: 'Deploy to GH Prod'
+            displayName: 'Deploy to Prod'
             inputs:
               targetType: inline
               script: |
                 Import-Module WebAdministration
-                Stop-WebAppPool githubhrms; Start-Sleep 3
-                robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\githubhrms" /MIR /XF appsettings.json /R:2 /W:2
+                Stop-WebAppPool -Name "prodhrms"; Start-Sleep 3
+                robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\prodhrms" /MIR /XF appsettings.json /R:2 /W:2
                 if ($LASTEXITCODE -ge 8) { exit 1 }
-                Start-WebAppPool githubhrms
+                Start-WebAppPool -Name "prodhrms"
                 exit 0
