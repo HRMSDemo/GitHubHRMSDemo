@@ -46,4 +46,17 @@ public class EmployeesController : ControllerBase
     [HttpDelete("{empNo:int}")]
     public async Task<IActionResult> Delete(int empNo) =>
         await _svc.DeleteAsync(empNo) ? NoContent() : NotFound();
+
+    // DELIBERATELY VULNERABLE - for CodeQL demo (SQL injection)
+    [HttpGet("search")]
+    public IActionResult Search(string name)
+    {
+        var conn = new Microsoft.Data.SqlClient.SqlConnection(
+            "Server=localhost\\SQLEXPRESS;Database=GH_HRMS_Dev;Trusted_Connection=True;TrustServerCertificate=True;");
+        conn.Open();
+        var cmd = new Microsoft.Data.SqlClient.SqlCommand(
+            "SELECT * FROM EMP WHERE ENAME = '" + name + "'", conn);
+        var reader = cmd.ExecuteReader();
+        return Ok("ran");
+    }
 }
