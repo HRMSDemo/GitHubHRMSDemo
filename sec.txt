@@ -1,0 +1,1 @@
+aws_secret = "wJalrXUtnFEMI7K7MDENGbPxRfiCYzKq3nT8pRvBn"
