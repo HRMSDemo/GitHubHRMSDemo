@@ -1,0 +1,77 @@
+trigger:
+  branches:
+    include:
+      - dev
+      - main
+  tags:
+    include:
+      - TEST-*
+      - PROD-*
+
+pool:
+  name: Default
+
+variables:
+  buildConfiguration: 'Release'
+
+stages:
+- stage: Dev
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/dev')
+  jobs:
+  - job: BuildDeployDev
+    steps:
+    - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
+      displayName: 'Build + publish'
+    - task: PowerShell@2
+      displayName: 'Deploy to GH Dev'
+      inputs:
+        targetType: inline
+        script: |
+          Import-Module WebAdministration
+          Stop-WebAppPool githubdevhrms; Start-Sleep 3
+          robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\githubdevhrms" /MIR /XF appsettings.json /R:2 /W:2
+          if ($LASTEXITCODE -ge 8) { exit 1 }
+          Start-WebAppPool githubdevhrms
+          exit 0
+
+- stage: Test
+  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST-')
+  jobs:
+  - job: BuildDeployTest
+    steps:
+    - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
+      displayName: 'Build + publish'
+    - task: PowerShell@2
+      displayName: 'Deploy to GH Test'
+      inputs:
+        targetType: inline
+        script: |
+          Import-Module WebAdministration
+          Stop-WebAppPool githubtesthrms; Start-Sleep 3
+          robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\githubtesthrms" /MIR /XF appsettings.json /R:2 /W:2
+          if ($LASTEXITCODE -ge 8) { exit 1 }
+          Start-WebAppPool githubtesthrms
+          exit 0
+
+- stage: Prod
+  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD-')
+  jobs:
+  - deployment: DeployProd
+    environment: Prod
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
+            displayName: 'Build + publish'
+          - task: PowerShell@2
+            displayName: 'Deploy to GH Prod'
+            inputs:
+              targetType: inline
+              script: |
+                Import-Module WebAdministration
+                Stop-WebAppPool githubhrms; Start-Sleep 3
+                robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\githubhrms" /MIR /XF appsettings.json /R:2 /W:2
+                if ($LASTEXITCODE -ge 8) { exit 1 }
+                Start-WebAppPool githubhrms
+                exit 0

@@ -15,13 +15,92 @@ variables:
   buildConfiguration: 'Release'
 
 stages:
+# ==========================================================
+# SECURITY GATE
+# Runs first for dev/main and TEST-*/PROD-* tag triggers.
+# A Gitleaks failure blocks all downstream build/deploy stages.
+# ==========================================================
+- stage: Security
+  displayName: 'Security Gate - Gitleaks'
+  jobs:
+  - job: GitleaksScan
+    displayName: 'Gitleaks Secret Scan'
+    steps:
+    - checkout: self
+      clean: true
+      fetchDepth: 0
+      fetchTags: true
+
+    - task: PowerShell@2
+      displayName: 'Run Gitleaks Enterprise Secret Policy'
+      inputs:
+        targetType: inline
+        script: |
+          Write-Host "=========================================="
+          Write-Host "Gitleaks centralized security gate"
+          Write-Host "Repository : $(Build.Repository.Name)"
+          Write-Host "Branch/Tag : $(Build.SourceBranch)"
+          Write-Host "Commit     : $(Build.SourceVersion)"
+          Write-Host "=========================================="
+
+          $reportDir = "$(Build.ArtifactStagingDirectory)\gitleaks"
+          $reportFile = "$reportDir\gitleaks-report.json"
+          New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
+
+          & "C:\tools\gitleaks\gitleaks.exe" detect `
+            --source "$(Build.SourcesDirectory)" `
+            --config "$(Build.SourcesDirectory)\.gitleaks.toml" `
+            --report-format json `
+            --report-path "$reportFile" `
+            --redact `
+            --verbose
+
+          $gitleaksExitCode = $LASTEXITCODE
+          Write-Host "Gitleaks exit code: $gitleaksExitCode"
+          Write-Host "##vso[task.setvariable variable=GITLEAKS_EXIT_CODE]$gitleaksExitCode"
+
+          # Do not fail this task yet. Publish the audit report first.
+          exit 0
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Gitleaks Audit Report'
+      condition: always()
+      inputs:
+        targetPath: '$(Build.ArtifactStagingDirectory)\gitleaks'
+        artifact: 'gitleaks-report'
+        publishLocation: 'pipeline'
+
+    - task: PowerShell@2
+      displayName: 'Enforce Gitleaks Security Gate'
+      condition: always()
+      inputs:
+        targetType: inline
+        script: |
+          $exitCode = [int]"$(GITLEAKS_EXIT_CODE)"
+
+          if ($exitCode -ne 0) {
+            Write-Host "##[error]GITLEAKS SECURITY GATE FAILED"
+            Write-Host "##[error]A prohibited secret, credential, password, token, key, or custom policy pattern was detected."
+            Write-Host "##[error]Build and deployment are BLOCKED."
+            exit 1
+          }
+
+          Write-Host "Gitleaks security gate PASSED."
+          exit 0
+
+# ==========================================================
+# DEV
+# ==========================================================
 - stage: Dev
-  condition: eq(variables['Build.SourceBranch'], 'refs/heads/dev')
+  displayName: 'Dev'
+  dependsOn: Security
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/dev'))
   jobs:
   - job: BuildDeployDev
     steps:
     - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
       displayName: 'Build + publish'
+
     - task: PowerShell@2
       displayName: 'Deploy to GH Dev'
       inputs:
@@ -34,13 +113,19 @@ stages:
           Start-WebAppPool githubdevhrms
           exit 0
 
+# ==========================================================
+# TEST
+# ==========================================================
 - stage: Test
-  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST-')
+  displayName: 'Test'
+  dependsOn: Security
+  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST-'))
   jobs:
   - job: BuildDeployTest
     steps:
     - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
       displayName: 'Build + publish'
+
     - task: PowerShell@2
       displayName: 'Deploy to GH Test'
       inputs:
@@ -53,8 +138,13 @@ stages:
           Start-WebAppPool githubtesthrms
           exit 0
 
+# ==========================================================
+# PROD
+# ==========================================================
 - stage: Prod
-  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD-')
+  displayName: 'Prod'
+  dependsOn: Security
+  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD-'))
   jobs:
   - deployment: DeployProd
     environment: Prod
@@ -64,6 +154,7 @@ stages:
           steps:
           - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
             displayName: 'Build + publish'
+
           - task: PowerShell@2
             displayName: 'Deploy to GH Prod'
             inputs:
