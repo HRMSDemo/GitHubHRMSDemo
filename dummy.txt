@@ -1,2 +1,0 @@
-password = "SuperSecret123!"
-"Add this lime to dummy.txt" 
