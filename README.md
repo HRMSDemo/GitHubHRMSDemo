@@ -36,7 +36,7 @@ The database is created and seeded automatically on first launch.
 Edit `appsettings.json` → `ConnectionStrings:ScottConnection`:
 
 ```
-Server=localhost;Database=ScottTiger;User Id=sa;Password=YourStrong!Pass;TrustServerCertificate=True;
+Configure the database connection using environment variables or a secure secret store. Do not hardcode credentials in source control.
 ```
 
 Run again — EF Core creates and seeds the schema on that server.
