@@ -18,18 +18,14 @@ stages:
 
 # ==========================================================
 # SECURITY GATE
-# Runs first for dev/main and TEST-*/PROD-* tag triggers.
-# Gitleaks scans the CURRENT checked-out repository content.
-# A Gitleaks failure blocks all downstream build/deploy stages.
 # ==========================================================
 - stage: Security
   displayName: 'Security Gate - Gitleaks'
-
   jobs:
   - job: GitleaksScan
     displayName: 'Gitleaks Secret Scan'
-
     steps:
+
     - checkout: self
       clean: true
 
@@ -66,8 +62,6 @@ stages:
 
           Write-Host "##vso[task.setvariable variable=GITLEAKS_EXIT_CODE]$gitleaksExitCode"
 
-          # Do not fail this task yet.
-          # The audit report must be published first.
           exit 0
 
     - task: PublishPipelineArtifact@1
@@ -99,21 +93,16 @@ stages:
 
 # ==========================================================
 # DEV
-# Trigger condition: dev branch
-# Requires Security stage to succeed.
 # ==========================================================
 - stage: Dev
   displayName: 'Dev'
   dependsOn: Security
-  condition: and(
-    succeeded(),
-    eq(variables['Build.SourceBranch'], 'refs/heads/dev')
-  )
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/dev'))
 
   jobs:
   - job: BuildDeployDev
-
     steps:
+
     - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
       displayName: 'Build + publish'
 
@@ -139,21 +128,16 @@ stages:
 
 # ==========================================================
 # TEST
-# Trigger condition: TEST-* Git tag
-# Requires Security stage to succeed.
 # ==========================================================
 - stage: Test
   displayName: 'Test'
   dependsOn: Security
-  condition: and(
-    succeeded(),
-    startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST-')
-  )
+  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST-'))
 
   jobs:
   - job: BuildDeployTest
-
     steps:
+
     - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
       displayName: 'Build + publish'
 
@@ -179,17 +163,11 @@ stages:
 
 # ==========================================================
 # PROD
-# Trigger condition: PROD-* Git tag
-# Requires Security stage to succeed.
-# Existing ADO Prod environment approval remains in effect.
 # ==========================================================
 - stage: Prod
   displayName: 'Prod'
   dependsOn: Security
-  condition: and(
-    succeeded(),
-    startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD-')
-  )
+  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD-'))
 
   jobs:
   - deployment: DeployProd
@@ -198,8 +176,8 @@ stages:
     strategy:
       runOnce:
         deploy:
-
           steps:
+
           - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
             displayName: 'Build + publish'
 
