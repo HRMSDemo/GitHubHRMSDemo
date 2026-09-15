@@ -15,21 +15,23 @@ variables:
   buildConfiguration: 'Release'
 
 stages:
+
 # ==========================================================
 # SECURITY GATE
 # Runs first for dev/main and TEST-*/PROD-* tag triggers.
+# Gitleaks scans the CURRENT checked-out repository content.
 # A Gitleaks failure blocks all downstream build/deploy stages.
 # ==========================================================
 - stage: Security
   displayName: 'Security Gate - Gitleaks'
+
   jobs:
   - job: GitleaksScan
     displayName: 'Gitleaks Secret Scan'
+
     steps:
     - checkout: self
       clean: true
-      fetchDepth: 0
-      fetchTags: true
 
     - task: PowerShell@2
       displayName: 'Run Gitleaks Enterprise Secret Policy'
@@ -45,21 +47,27 @@ stages:
 
           $reportDir = "$(Build.ArtifactStagingDirectory)\gitleaks"
           $reportFile = "$reportDir\gitleaks-report.json"
+
           New-Item -ItemType Directory -Force -Path $reportDir | Out-Null
 
           & "C:\tools\gitleaks\gitleaks.exe" detect `
             --source "$(Build.SourcesDirectory)" `
             --config "$(Build.SourcesDirectory)\.gitleaks.toml" `
-            --report-format json `
-            --report-path "$reportFile" `
+            --no-git `
             --redact `
-            --verbose
+            --verbose `
+            --report-format json `
+            --report-path "$reportFile"
 
           $gitleaksExitCode = $LASTEXITCODE
+
           Write-Host "Gitleaks exit code: $gitleaksExitCode"
+          Write-Host "Gitleaks report: $reportFile"
+
           Write-Host "##vso[task.setvariable variable=GITLEAKS_EXIT_CODE]$gitleaksExitCode"
 
-          # Do not fail this task yet. Publish the audit report first.
+          # Do not fail this task yet.
+          # The audit report must be published first.
           exit 0
 
     - task: PublishPipelineArtifact@1
@@ -88,15 +96,23 @@ stages:
           Write-Host "Gitleaks security gate PASSED."
           exit 0
 
+
 # ==========================================================
 # DEV
+# Trigger condition: dev branch
+# Requires Security stage to succeed.
 # ==========================================================
 - stage: Dev
   displayName: 'Dev'
   dependsOn: Security
-  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/dev'))
+  condition: and(
+    succeeded(),
+    eq(variables['Build.SourceBranch'], 'refs/heads/dev')
+  )
+
   jobs:
   - job: BuildDeployDev
+
     steps:
     - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
       displayName: 'Build + publish'
@@ -107,21 +123,36 @@ stages:
         targetType: inline
         script: |
           Import-Module WebAdministration
-          Stop-WebAppPool githubdevhrms; Start-Sleep 3
+
+          Stop-WebAppPool githubdevhrms
+          Start-Sleep 3
+
           robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\githubdevhrms" /MIR /XF appsettings.json /R:2 /W:2
-          if ($LASTEXITCODE -ge 8) { exit 1 }
+
+          if ($LASTEXITCODE -ge 8) {
+            exit 1
+          }
+
           Start-WebAppPool githubdevhrms
           exit 0
 
+
 # ==========================================================
 # TEST
+# Trigger condition: TEST-* Git tag
+# Requires Security stage to succeed.
 # ==========================================================
 - stage: Test
   displayName: 'Test'
   dependsOn: Security
-  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST-'))
+  condition: and(
+    succeeded(),
+    startsWith(variables['Build.SourceBranch'], 'refs/tags/TEST-')
+  )
+
   jobs:
   - job: BuildDeployTest
+
     steps:
     - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
       displayName: 'Build + publish'
@@ -132,25 +163,42 @@ stages:
         targetType: inline
         script: |
           Import-Module WebAdministration
-          Stop-WebAppPool githubtesthrms; Start-Sleep 3
+
+          Stop-WebAppPool githubtesthrms
+          Start-Sleep 3
+
           robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\githubtesthrms" /MIR /XF appsettings.json /R:2 /W:2
-          if ($LASTEXITCODE -ge 8) { exit 1 }
+
+          if ($LASTEXITCODE -ge 8) {
+            exit 1
+          }
+
           Start-WebAppPool githubtesthrms
           exit 0
 
+
 # ==========================================================
 # PROD
+# Trigger condition: PROD-* Git tag
+# Requires Security stage to succeed.
+# Existing ADO Prod environment approval remains in effect.
 # ==========================================================
 - stage: Prod
   displayName: 'Prod'
   dependsOn: Security
-  condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD-'))
+  condition: and(
+    succeeded(),
+    startsWith(variables['Build.SourceBranch'], 'refs/tags/PROD-')
+  )
+
   jobs:
   - deployment: DeployProd
     environment: Prod
+
     strategy:
       runOnce:
         deploy:
+
           steps:
           - script: dotnet publish --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/app
             displayName: 'Build + publish'
@@ -161,8 +209,15 @@ stages:
               targetType: inline
               script: |
                 Import-Module WebAdministration
-                Stop-WebAppPool githubhrms; Start-Sleep 3
+
+                Stop-WebAppPool githubhrms
+                Start-Sleep 3
+
                 robocopy "$(Build.ArtifactStagingDirectory)\app" "C:\inetpub\githubhrms" /MIR /XF appsettings.json /R:2 /W:2
-                if ($LASTEXITCODE -ge 8) { exit 1 }
+
+                if ($LASTEXITCODE -ge 8) {
+                  exit 1
+                }
+
                 Start-WebAppPool githubhrms
                 exit 0
